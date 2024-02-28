@@ -1,0 +1,23 @@
+Package: DengueARGO
+Type: Package
+Version: 1.0.0
+Date: 2024-02-28
+Title: Disease Prediction Using Various Statistical Models
+Authors@R: c(
+    person("Yang", "Xiao", email = "yang.xiao@kaust.edu.sa", role = c("aut","cre"))
+    )
+Description: This package provides functions to predict disease spread using models such as ARGO, SAR, and GT. It allows users to generate lagged data sets, construct model matrices, fit models, and evaluate predictions.
+License: GPL-3
+Depends:
+    R (>= 3.5.0)
+Imports:
+    dplyr,
+    lubridate,
+    glmnet,
+    zoo
+Suggests:
+    knitr,
+    rmarkdown
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.3.1
