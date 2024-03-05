@@ -5,18 +5,19 @@
 \title{Fit Model and Make Prediction}
 \usage{
 get_Prediction(
-  model = "ARGO",
   start_train,
   end_train,
   start_pred,
   end_pred,
+  model = "ARGO",
   case,
-  GT
+  GT,
+  lags = NULL,
+  pred_unit = "M",
+  offset_GT = 0.001
 )
 }
 \arguments{
-\item{model}{The model to fit ("ARGO", "SAR", "GT", or "SAR_GT").}
-
 \item{start_train}{The start date for the training period.}
 
 \item{end_train}{The end date for the training period.}
@@ -24,6 +25,8 @@ get_Prediction(
 \item{start_pred}{The start date for the prediction period.}
 
 \item{end_pred}{The end date for the prediction period.}
+
+\item{model}{The model to fit ("ARGO", "SAR", "GT", or "SAR_GT").}
 
 \item{case}{A data frame containing case data.}
 

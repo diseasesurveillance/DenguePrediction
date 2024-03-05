@@ -4,25 +4,44 @@
 \alias{get_X}
 \title{Get the X Matrix for Model Fitting}
 \usage{
-get_X(start, end, case, GT, model)
+get_X(
+  start,
+  end,
+  case = NULL,
+  GT = NULL,
+  lags = c(1:12, 24),
+  pred_unit = "M",
+  offset_GT = 0.001
+)
 }
 \arguments{
 \item{start}{The start date for generating the X matrix, in "YYYY-MM-DD" format.}
 
 \item{end}{The end date for generating the X matrix, in "YYYY-MM-DD" format.}
 
-\item{case}{A data frame of case data, with Dengue case variable named "N_cases" and date variable named "date".}
+\item{case}{An optional data frame of case data, with a date variable named "date" and a Dengue case variable named "N_cases".
+If NULL, no case data will be used.}
 
-\item{GT}{A data frame of Google Trends data.}
+\item{GT}{An optional data frame of Google Trends data. If NULL, no Google Trends data will be used.}
 
-\item{model}{A string specifying the model type ("ARGO", "SAR", "GT", or "SAR_GT").}
+\item{lags}{A numeric vector specifying the lags to apply when generating the lagged case data.
+The default setting is c(1:12, 24), which corresponds to ARGO model's settings.}
+
+\item{pred_unit}{A string that specifies the prediction unit ("W" for weekly or "M" for monthly).
+The default value "M" indicates monthly data.}
+
+\item{offset_GT}{A small positive numeric value added to the Google Trends data to avoid taking the logarithm of zero.
+The default value is 0.001.}
 }
 \value{
-A matrix X used for fitting the specified model.
+A matrix X used for fitting the specified model which includes lagged case data and/or transformed Google Trends data,
+        depending on the input.
 }
 \description{
-This function generates the X matrix required for different prediction models by processing case and Google Trends (GT) data.
+This function generates the X matrix required for fitting prediction models by processing case and/or Google Trends (GT) data.
+It standardizes case data, converts it to the specified prediction unit, generates lagged data, and can apply a logarithmic
+transformation to Google Trends data with an offset to avoid log of zero.
 }
 \examples{
-get_X("2020-01-01", "2020-12-31", case_data, GT_data, "ARGO")
+get_X("2020-01-01", "2020-12-31", case_data, GT_data, lags = c(1:12, 24), pred_unit = "M", offset_GT = 0.001)
 }

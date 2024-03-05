@@ -1,0 +1,46 @@
+install.packages('haven')
+library(haven)
+library(tidyverse)
+library(lubridate)
+
+setwd('/Users/xiaoy0a/Desktop/Course Work/STAT360FDA/data')
+data_21 <- read.csv("monthly_volume_2021.csv")
+data_22 <- read.csv("monthly_volume_2022.csv")
+data_23 <- read.csv("monthly_volume_2023.csv")
+
+data_21$Trade.Month <- as.Date(data_21$Trade.Month, tryFormats = c("%Y/%m"))
+?as.Date
+length(unique(data_21$Options.Class))
+length(unique(data_21$Underlying))
+
+d_21_comb <- data_21 %>% group_by(Trade.Month, Underlying)%>% 
+  summarise(TotalVolume = sum(Volume, na.rm = TRUE)) %>%
+  mutate(
+    Year = sub("/.*", "", Trade.Month),
+    Month = sub(".*/", "", Trade.Month),
+    Trade.Month = make_date(Year, Month, 1),
+    TotalVolume_log = log(TotalVolume),
+  )
+
+#
+library(fdapace)
+class(d_21_comb$Trade.Month)
+
+d_21_comb_fda <- MakeFPCAInputs(IDs = d_21_comb$Underlying, d_21_comb$Trade.Month,
+               d_21_comb$TotalVolume_log)
+d_21_comb_f_obj <- FPCA(d_21_comb_fda$Ly, d_21_comb_fda$Lt, 
+                        list(plot = TRUE, methodMuCovEst = 'smooth', userBwCov = 2))
+
+CreatePathPlot(d_21_comb_f_obj, subset = c(3,5,135), main = 'K = 11', pch = 4); grid()
+CreatePathPlot(d_21_comb_f_obj, subset = c(3,5,135), K = 3, main = 'K = 3', pch = 4) ;
+grid()
+
+
+CreateOutliersPlot(d_21_comb_f_obj, optns = list(K = 3, variant = 'KDE'))
+CreateFuncBoxPlot(fpcaObjFlies, xlab = 'Days', ylab = '# of eggs laid', 
+                  optns = list(K =3, variant='bagplot'))
+
+library(roxygen2)
+library(DengueARGO)
+
+pred_Measurement()

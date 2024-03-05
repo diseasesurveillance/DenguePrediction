@@ -4,23 +4,40 @@
 \alias{pred_Measurement}
 \title{Aggregate Prediction and Measurement for Multiple Models and Periods}
 \usage{
-pred_Measurement(start_d, end_d, pred_period, pred_length = 1)
+pred_Measurement(
+  start_d,
+  end_d,
+  case,
+  GT,
+  pred_period,
+  pred_length = 1,
+  pred_unit = "M"
+)
 }
 \arguments{
-\item{start_d}{The start date for the overall prediction period.}
+\item{start_d}{The start date for the training period in "YYYY-MM-DD" format.}
 
-\item{end_d}{The end date for the overall prediction period.}
+\item{end_d}{The end date for the training period in "YYYY-MM-DD" format.}
+
+\item{case}{A data frame of case data used for model training.}
+
+\item{GT}{A data frame of Google Trends data used for model training.}
 
 \item{pred_period}{The total number of prediction periods.}
 
 \item{pred_length}{The length of each prediction period in months (either 1 or 2).}
+
+\item{pred_unit}{The unit of prediction period, default is "M" for monthly.}
 }
 \value{
 A data frame of performance measurements for each model and prediction period.
+        It contains model predictions and corresponding performance metrics.
 }
 \description{
 This function aggregates predictions and calculates performance measurements across multiple models and prediction periods.
+It takes case data and Google Trends data as input, fits models for specified prediction periods, and returns a data frame
+of performance measurements for each model.
 }
 \examples{
-pred_Measurement("2020-01-01", "2020-12-31", 12, 1)
+pred_Measurement("2020-01-01", "2020-12-31", case_data, GT_data, 12, 1, "M")
 }
