@@ -1,0 +1,327 @@
+---
+title: "ARGO_rep"
+author: "Yang Xiao"
+date: "2024-02-20"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lubridate)
+library(glmnet)
+
+file_adress <- '/Users/xiaoy0a/Desktop/Task/Nowcasting/1. SecondMeeting/'
+setwd(file_adress)
+
+#install
+#devtools::install_github("diseasesurveillance/DenguePrediction/DengueARGO")
+library(DengueARGO)
+# library(DengueARGO)
+```
+
+```{r data}
+# Set directory
+file_adress <- "your_path"
+file_adress <- '/Users/xiaoy0a/Desktop/Task/Nowcasting/1. SecondMeeting/'
+setwd(file_adress)
+
+colnames_GT <- c("Time","Dengue","Sintomas_Dengue")
+
+AC <- read.csv("AC.csv", header = T)
+
+AM <- read.csv("AM.csv", header = T)
+
+RJ <- read.csv("RJ.csv", header = T)
+
+SP <- read.csv("SP.csv", header = T)
+
+AC_GT <- read.csv("AC_GT.csv", header = F, 
+                  col.names = colnames_GT)[-c(1:3),]
+AM_GT <- read.csv("AM_GT.csv", header = F, 
+                  col.names = colnames_GT)[-c(1:3),]
+RJ_GT <- read.csv("RJ_GT.csv", header = F, 
+                  col.names = colnames_GT)[-c(1:3),]
+SP_GT <- read.csv("SP_GT.csv", header = F, 
+                  col.names = colnames_GT
+                  )[-c(1:3),]
+
+AC_GT_Weekly <- read.csv("AC_GT_Weekly.csv", header = F, 
+                         col.names = colnames_GT)[-c(1:3),]
+AM_GT_Weekly <- read.csv("AM_GT_Weekly.csv", header = F, 
+                         col.names = colnames_GT)[-c(1:3),]
+RJ_GT_Weekly <- read.csv("RJ_GT_Weekly.csv", header = F, 
+                         col.names = colnames_GT)[-c(1:3),]
+SP_GT_Weekly <- read.csv("SP_GT_Weekly.csv", header = F, 
+                         col.names = colnames_GT)[-c(1:3),]
+```
+
+```{r example}
+start_d <- as.Date('2020-01-01'); end_d <- as.Date('2021-12-31')
+start_pred <- start_d %m+% months(1); end_pred <- end_d %m+% months(1)
+
+# X marix
+X_test <- get_X(start_d,
+                end_d, 
+                case = AC, 
+                GT = AC_GT_Weekly,
+                lags = c(1:12), # ARGO's setting
+                pred_unit = "Week",
+                offset_GT = 0.001) 
+
+# Single prediction
+pred_single <- get_Prediction(start_d,
+                       end_d,
+                       start_pred,
+                       end_pred,
+                       model = 'ARGO',
+                       AC,
+                       AC_GT ,
+                       lags = c(1:52), # ARGO's setting
+                       pred_unit = "Month",
+                       offset_GT = 0.001)
+
+# Predictions
+set.seed(1)
+preds <- compare_Prediction(start_d, end_d,
+                            case = AC, GT = AC_GT,
+                            12, 1,
+                            pred_unit = "Month")
+
+# Measurements
+preds_M <- compare_Measurement(preds, relative_to_naive = F)
+
+# Boxplot
+get_Boxplot(preds,
+            type = "Prec",
+            order_by = "Model")
+```
+
+```{r BeforeC}
+set.seed(1)
+# Monthly
+################### Before Covid， before  2020 ###################
+
+# Two years time window
+start_d <- as.Date('2015-01-01'); end_d <- as.Date('2017-12-31')
+# lags <- c(1:24)
+
+### AC
+AC_15_17_two <- compare_Prediction(start_d, end_d,
+                            case = AC, GT = AC_GT,
+                            24, 1,
+                            # lags = c(1:24),
+                            pred_unit = "Month")
+### AM
+AM_15_17_two <- compare_Prediction(start_d, end_d,
+                            case = AM, GT = AM_GT,
+                            24, 1,
+                            # lags = c(1:24),
+                            pred_unit = "Month")
+### SP
+SP_15_17_two <- compare_Prediction(start_d, end_d,
+                            case = SP, GT = SP_GT,
+                            24, 1,
+                            # lags = c(1:24),
+                            pred_unit = "Month")
+### RJ
+RJ_15_17_two <- compare_Prediction(start_d, end_d,
+                            case = RJ, GT = RJ_GT,
+                            24, 1,
+                            # lags = c(1:24),
+                            pred_unit = "Month")
+
+
+AC_15_17_two_m <- compare_Measurement(AC_15_17_two)
+
+AC_15_17_two_p <- get_Boxplot(AC_15_17_two,
+            # type = "Prec",
+            order_by = "Model",
+            plot_title = "Acre",
+            y_lab = "Absolute(y - y_pred)")
+
+AM_15_17_two_m <- compare_Measurement(AM_15_17_two)
+
+AM_15_17_two_p <- get_Boxplot(AM_15_17_two,
+            # type = "Prec",
+            order_by = "Model",
+            plot_title = "Amazônas",
+            y_lab = "Absolute(y - y_pred)")
+
+SP_15_17_two_m <- compare_Measurement(SP_15_17_two)
+
+SP_15_17_two_p <- get_Boxplot(SP_15_17_two,
+            # type = "Prec",
+            order_by = "Model",
+            plot_title = "São Paulo",
+            y_lab = "Absolute(y - y_pred)")
+
+RJ_15_17_two_m <- compare_Measurement(RJ_15_17_two, relative_to_naive = F)
+
+RJ_15_17_two_p <- get_Boxplot(RJ_15_17_two,
+            # type = "Prec",
+            order_by = "Model",
+            plot_title = "Rio de Janeiro",
+            y_lab = "Absolute(y - y_pred)")
+
+
+# Weekly
+# How to choose lags
+
+```
+
+```{R AfterC}
+set.seed(1)
+#################### After Covid ###################
+start_d <- as.Date('2022-01-01'); end_d <- as.Date('2022-12-31')
+
+# AC
+AC_22_22_one <- compare_Prediction(start_d, end_d,
+                            case = AC, GT = AC_GT,
+                            12, 1,
+                            # lags = c(1:24),
+                            pred_unit = "Month")
+# AM
+AM_22_22_one <- compare_Prediction(start_d, end_d,
+                            case = AM, GT = AM_GT,
+                            12, 1,
+                            # lags = c(1:24),
+                            pred_unit = "Month")
+# SP
+SP_22_22_one <- compare_Prediction(start_d, end_d,
+                            case = SP, GT = SP_GT,
+                            12, 1,
+                            # lags = c(1:24),
+                            pred_unit = "Month")
+# RJ
+RJ_22_22_one <- compare_Prediction(start_d, end_d,
+                            case = RJ, GT = RJ_GT,
+                            12, 1,
+                            # lags = c(1:24),
+                            pred_unit = "Month")
+
+AC_22_22_one_m <- compare_Measurement(AC_22_22_one)
+
+AC_22_22_one_p <- get_Boxplot(AC_22_22_one,
+            # type = "Prec",
+            order_by = "Model",
+            plot_title = "Acre",
+            y_lab = "Absolute(y - y_pred)")
+
+AM_22_22_one_m <- compare_Measurement(AM_22_22_one)
+
+AM_22_22_one_p <- get_Boxplot(AM_22_22_one,
+            # type = "Prec",
+            order_by = "Model",
+            plot_title = "Amazônas",
+            y_lab = "Absolute(y - y_pred)")
+
+SP_22_22_one_m <- compare_Measurement(SP_22_22_one)
+
+SP_22_22_one_p <- get_Boxplot(SP_22_22_one,
+            # type = "Prec",
+            order_by = "Model",
+            plot_title = "São Paulo",
+            y_lab = "Absolute(y - y_pred)")
+
+RJ_22_22_one_m <- compare_Measurement(RJ_22_22_one)
+
+RJ_22_22_one_p <- get_Boxplot(RJ_22_22_one,
+            # type = "Prec",
+            order_by = "Model",
+            plot_title = "Rio de Janeiro",
+            y_lab = "Absolute(y - y_pred)")
+
+```
+
+
+```{R LastTen}
+set.seed(1)
+#################### Last ten-years ###################
+start_d <- as.Date('2015-01-01'); end_d <- as.Date('2017-12-31')
+
+# AC
+AC_15_17_six <- compare_Prediction(start_d, end_d,
+                            case = AC, GT = AC_GT,
+                            72, 1,
+                            # lags = c(1:24),
+                            pred_unit = "Month")
+
+# AM
+AM_15_17_six <- compare_Prediction(start_d, end_d,
+                            case = AM, GT = AM_GT,
+                            72, 1,
+                            # lags = c(1:24),
+                            pred_unit = "Month")
+
+# SP
+SP_15_17_six <- compare_Prediction(start_d, end_d,
+                            case = SP, GT = SP_GT,
+                            72, 1,
+                            # lags = c(1:24),
+                            pred_unit = "Month")
+
+# RJ
+RJ_15_17_six <- compare_Prediction(start_d, end_d,
+                            case = RJ, GT = RJ_GT,
+                            72, 1,
+                            # lags = c(1:24),
+                            pred_unit = "Month")
+
+AC_15_17_six_m <- compare_Measurement(AC_15_17_six)
+
+AC_15_17_six_p <- get_Boxplot(AC_15_17_six,
+            # type = "Prec",
+            order_by = "Model",
+            plot_title = "Acre",
+            y_lab = "Absolute(y - y_pred)")
+
+AM_15_17_six_m <- compare_Measurement(AM_15_17_six)
+
+AM_15_17_six_p <- get_Boxplot(AM_15_17_six,
+            # type = "Prec",
+            order_by = "Model",
+            plot_title = "Amazônas",
+            y_lab = "Absolute(y - y_pred)")
+
+
+SP_15_17_six_m <- compare_Measurement(SP_15_17_six)
+
+SP_15_17_six_p <- get_Boxplot(SP_15_17_six,
+            # type = "Prec",
+            order_by = "Model",
+            plot_title = "São Paulo",
+            y_lab = "Absolute(y - y_pred)")
+
+
+RJ_15_17_six_m <- compare_Measurement(RJ_15_17_six)
+
+RJ_15_17_six_p <- get_Boxplot(RJ_15_17_six,
+            # type = "Prec",
+            order_by = "Model",
+            plot_title = "Rio de Janeiro",
+            y_lab = "Absolute(y - y_pred)")
+
+```
+
+```{R try}
+library(patchwork)
+
+(AC_15_17_two_p | SP_15_17_two_p) / (AM_15_17_two_p | RJ_15_17_two_p)
+
+ggsave(filename = "15_17_two_box_model_diff.jpeg", path = file_adress, dpi = 200, 
+       width = 12, height = 8)
+
+(AC_22_22_one_p | SP_22_22_one_p) / (AM_22_22_one_p | RJ_22_22_one_p)
+
+ggsave(filename = "22_22_one_box_model_diff.jpeg", path = file_adress, dpi = 200, 
+       width = 12, height = 8)
+
+(AC_15_17_six_p | SP_15_17_six_p) / (AM_15_17_six_p | RJ_15_17_six_p)
+
+ggsave(filename = "15_17_six_box_model_diff.jpeg", path = file_adress, dpi = 200, 
+       width = 12, height = 8)
+```
+
