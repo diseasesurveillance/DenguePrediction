@@ -1,0 +1,32 @@
+---
+title: "Build_Package"
+author: "Yang Xiao"
+date: "2024-03-29"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1
+
+```{r }
+# 如果没有 {usethis} 包的话，先下载安装。
+install.packages("usethis")
+
+setwd('/Users/xiaoy0a/Desktop/Task/Nowcasting/R_package/')
+# 命名一个 {rPackageTutorial} 包，并且创建，path 可以填写你想创建在哪个文件夹中。
+# 这里我们选择在当前路径创建该包
+usethis::create_package(path = "rPackageTutorial")
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

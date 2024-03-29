@@ -2,23 +2,29 @@
 % Please edit documentation in R/get_Measurement.R
 \name{get_Measurement}
 \alias{get_Measurement}
-\title{Calculate Prediction Performance Measurements}
+\title{Evaluate Prediction Accuracy}
 \usage{
 get_Measurement(y_fitted, y, IF_log = F)
 }
 \arguments{
-\item{y_fitted}{The fitted (predicted) values.}
+\item{y_fitted}{Numeric vector of predicted (fitted) values.}
 
-\item{y}{The actual values.}
+\item{y}{Numeric vector of actual observed values.}
 
-\item{IF_log}{A logical indicating whether the values were transformed using logarithm. Default is FALSE.}
+\item{IF_log}{Logical flag indicating if the values have been logarithmically transformed before prediction.
+If `TRUE`, the function will first apply an inverse transformation. Default is `FALSE`.}
 }
 \value{
-A data frame containing the performance measurements: RMSE, MAE, RMSPE, MAPE, and CORR.
+A data frame with a single row containing the calculated metrics: RMSE, MAE, RMSPE, MAPE, and CORR.
 }
 \description{
-This function calculates various performance measurements for the fitted (predicted) vs. actual data.
+Computes various metrics to evaluate the accuracy of predicted values against actual observations.
+The function supports evaluations both on original and logarithmically transformed scales. Metrics
+include Root Mean Square Error (RMSE), Mean Absolute Error (MAE), Root Mean Square Percentage Error
+(RMSPE), Mean Absolute Percentage Error (MAPE), and the correlation (CORR) between predicted and actual
+values.
 }
 \examples{
-get_Measurement(fitted_values, actual_values)
+# Assuming `fitted_values` and `actual_values` are your vectors of predicted and actual values
+performance_metrics <- get_Measurement(fitted_values, actual_values)
 }

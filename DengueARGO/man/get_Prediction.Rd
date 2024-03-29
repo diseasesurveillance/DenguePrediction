@@ -2,7 +2,7 @@
 % Please edit documentation in R/get_Prediction.R
 \name{get_Prediction}
 \alias{get_Prediction}
-\title{Fit Model and Make Prediction}
+\title{Model Fitting and Prediction}
 \usage{
 get_Prediction(
   start_train,
@@ -13,31 +13,39 @@ get_Prediction(
   case,
   GT,
   lags = NULL,
-  pred_unit = "M",
+  pred_unit = "Month",
   offset_GT = 0.001
 )
 }
 \arguments{
-\item{start_train}{The start date for the training period.}
+\item{start_train}{The start date for the training dataset, in "YYYY-MM-DD" format.}
 
-\item{end_train}{The end date for the training period.}
+\item{end_train}{The end date for the training dataset, in "YYYY-MM-DD" format.}
 
-\item{start_pred}{The start date for the prediction period.}
+\item{start_pred}{The start date for the forecasting period, in "YYYY-MM-DD" format.}
 
-\item{end_pred}{The end date for the prediction period.}
+\item{end_pred}{The end date for the forecasting period, in "YYYY-MM-DD" format.}
 
-\item{model}{The model to fit ("ARGO", "SAR", "GT", or "SAR_GT").}
+\item{model}{The prediction model to be applied. Accepted models include "ARGO", "SAR", "GT", or "SAR_GT", with "ARGO" being the default.}
 
-\item{case}{A data frame containing case data.}
+\item{case}{A data frame containing the case data, which must include columns for "date" and "N_cases".}
 
-\item{GT}{A data frame containing Google Trends data.}
+\item{GT}{A data frame of Google Trends data, relevant to the case study.}
+
+\item{lags}{An optional numeric vector detailing the lags to be applied for generating lagged data. The default setting varies based on the chosen model.}
+
+\item{pred_unit}{The prediction unit, either "Month" or "Week", with "Month" set as the default.}
+
+\item{offset_GT}{A small positive value added to the Google Trends data before logarithmic transformation, set to avoid the log of zero issues. The default value is 0.001.}
 }
 \value{
-A data frame with actual and predicted cases for the prediction period.
+Returns a data frame containing both the actual and predicted case counts for the forecast period, facilitating direct comparison and model evaluation.
 }
 \description{
-This function fits the specified prediction model to the training data and makes predictions for the given period.
+Utilizes specified prediction models to fit training data, incorporating both epidemiological case data and Google Trends data. After model fitting, it forecasts case counts for a designated future period. The function supports a variety of models including ARGO, SAR, GT, and SAR_GT for a comprehensive analysis.
 }
 \examples{
-get_Prediction("ARGO", "2020-01-01", "2020-06-30", "2020-07-01", "2020-07-31", case_data, GT_data)
+get_Prediction(start_train = "2020-01-01", end_train = "2020-06-30",
+               start_pred = "2020-07-01", end_pred = "2020-07-31",
+               model = "ARGO", case = case_data, GT = GT_data)
 }

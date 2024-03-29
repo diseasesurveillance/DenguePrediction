@@ -4,23 +4,29 @@
 \alias{lag_Gen}
 \title{Produce Lagged Data}
 \usage{
-lag_Gen(data, start, end, lag_m)
+lag_Gen(data, start, end, lags, pred_unit = "Month")
 }
 \arguments{
-\item{data}{A data frame containing the data to be lagged.}
+\item{data}{A data frame containing the data to be lagged. It expects at least two columns:
+one for the date and another for the N_cases.}
 
 \item{start}{The start date from which to begin lagging, in "YYYY-MM-DD" format.}
 
 \item{end}{The end date for the lagging period, in "YYYY-MM-DD" format.}
 
-\item{lag_m}{The number of months to lag by.}
+\item{lags}{The number of periods to lag by. The unit of this lag is determined by the `pred_unit` parameter.}
+
+\item{pred_unit}{The unit of prediction and lagging. It accepts either "Month" or "Week" to indicate
+the resolution of lagging. Defaults to "Month".}
 }
 \value{
-A vector containing the lagged N_cases for the specified period.
+A data frame containing the lagged data for the specified period. The returned data frame
+includes the original date and N_cases columns, along with a new column for the lagged N_cases.
 }
 \description{
-This function produces lagged data for the specified period and lag months.
+This function produces lagged data for the specified period and the number of lags.
+It supports lagging data based on "Month" or "Week" units.
 }
 \examples{
-lag_Gen(data, "2020-01-01", "2020-12-31", 3)
+lag_Gen(data, "2020-01-01", "2020-12-31", 3, "Month")
 }

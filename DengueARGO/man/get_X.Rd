@@ -2,7 +2,7 @@
 % Please edit documentation in R/get_X.R
 \name{get_X}
 \alias{get_X}
-\title{Get the X Matrix for Model Fitting}
+\title{Generate X Matrix for Model Fitting}
 \usage{
 get_X(
   start,
@@ -10,37 +10,36 @@ get_X(
   case = NULL,
   GT = NULL,
   lags = c(1:12, 24),
-  pred_unit = "M",
+  pred_unit = "Month",
   offset_GT = 0.001
 )
 }
 \arguments{
-\item{start}{The start date for generating the X matrix, in "YYYY-MM-DD" format.}
+\item{start}{The starting date for generating the X matrix, specified in "YYYY-MM-DD" format.}
 
-\item{end}{The end date for generating the X matrix, in "YYYY-MM-DD" format.}
+\item{end}{The ending date for generating the X matrix, specified in "YYYY-MM-DD" format.}
 
-\item{case}{An optional data frame of case data, with a date variable named "date" and a Dengue case variable named "N_cases".
-If NULL, no case data will be used.}
+\item{case}{An optional data frame containing case data. The data frame should have a date column named "date"
+and a case count column named "N_cases". If not provided, case data will not be included in the X matrix.}
 
-\item{GT}{An optional data frame of Google Trends data. If NULL, no Google Trends data will be used.}
+\item{GT}{An optional data frame of Google Trends data. If not provided, Google Trends data will not be included in the X matrix.}
 
-\item{lags}{A numeric vector specifying the lags to apply when generating the lagged case data.
-The default setting is c(1:12, 24), which corresponds to ARGO model's settings.}
+\item{lags}{A numeric vector indicating the lags to apply for generating lagged case data. Defaults to `c(1:12, 24)`.}
 
-\item{pred_unit}{A string that specifies the prediction unit ("W" for weekly or "M" for monthly).
-The default value "M" indicates monthly data.}
+\item{pred_unit}{The prediction unit for aggregation, either "W" for weekly or "M" for monthly data. Defaults to "M" for monthly.}
 
-\item{offset_GT}{A small positive numeric value added to the Google Trends data to avoid taking the logarithm of zero.
-The default value is 0.001.}
+\item{offset_GT}{A small positive value added to Google Trends data before applying the logarithmic transformation to avoid
+the logarithm of zero. Defaults to 0.001.}
 }
 \value{
-A matrix X used for fitting the specified model which includes lagged case data and/or transformed Google Trends data,
-        depending on the input.
+A matrix `X` suitable for model fitting, containing either or both lagged case data and logarithmically transformed
+        Google Trends data, depending on the inputs provided.
 }
 \description{
-This function generates the X matrix required for fitting prediction models by processing case and/or Google Trends (GT) data.
-It standardizes case data, converts it to the specified prediction unit, generates lagged data, and can apply a logarithmic
-transformation to Google Trends data with an offset to avoid log of zero.
+This function prepares the X matrix needed for model fitting. It processes both case data and Google Trends data,
+applying standardization to case counts, aggregation to the specified prediction unit (weekly or monthly),
+and generates lagged data. Additionally, it can apply a logarithmic transformation to Google Trends data
+to handle zeros through an offset adjustment.
 }
 \examples{
 get_X("2020-01-01", "2020-12-31", case_data, GT_data, lags = c(1:12, 24), pred_unit = "M", offset_GT = 0.001)

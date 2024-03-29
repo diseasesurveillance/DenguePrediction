@@ -1,0 +1,919 @@
+---
+title: "ARGO_rep"
+author: "Yang Xiao"
+date: "2024-02-20"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lubridate)
+library(glmnet)
+
+# setwd('/Users/xiaoy0a/Desktop/Task/Nowcasting/ARGO rep')
+# case <- read.csv("CaseCount(Brazil).csv")
+# GT <- read.csv("GT_Brazil.csv")
+# 
+# # Change the date variable into date class
+# case$date <- as.Date(case$date,"%d/%m/%Y")
+```
+
+```{r data}
+# Set directory
+setwd('/Users/xiaoy0a/Desktop/Task/Nowcasting/1. SecondMeeting/')
+
+colnames_GT <- c("Time","Dengue","Sintomas_Dengue")
+
+AC <- read.csv("AC.csv", header = T)
+
+AM <- read.csv("AM.csv", header = T)
+
+RJ <- read.csv("RJ.csv", header = T)
+
+SP <- read.csv("SP.csv", header = T)
+
+AC_GT <- read.csv("AC_GT.csv", header = F, 
+                  col.names = colnames_GT)[-c(1:3),]
+AM_GT <- read.csv("AM_GT.csv", header = F, 
+                  col.names = colnames_GT)[-c(1:3),]
+RJ_GT <- read.csv("RJ_GT.csv", header = F, 
+                  col.names = colnames_GT)[-c(1:3),]
+SP_GT <- read.csv("SP_GT.csv", header = F, 
+                  col.names = colnames_GT
+                  )[-c(1:3),]
+
+AC_GT_Weekly <- read.csv("AC_GT_Weekly.csv", header = F, 
+                         col.names = colnames_GT)[-c(1:3),]
+AM_GT_Weekly <- read.csv("AM_GT_Weekly.csv", header = F, 
+                         col.names = colnames_GT)[-c(1:3),]
+RJ_GT_Weekly <- read.csv("RJ_GT_Weekly.csv", header = F, 
+                         col.names = colnames_GT)[-c(1:3),]
+SP_GT_Weekly <- read.csv("SP_GT_Weekly.csv", header = F, 
+                         col.names = colnames_GT)[-c(1:3),]
+```
+
+## Development tools
+```{r develop}
+# install.packages("devtools")
+# install.packages("roxygen2")
+
+library(devtools)
+library(roxygen2)
+
+setwd('/Users/xiaoy0a/Desktop/Task/Nowcasting/DengueARGO')
+devtools::document()
+```
+
+## R Markdown
+```{r get_X}
+lag_Gen <- function(data, 
+                    start, 
+                    end, 
+                    lags, 
+                    pred_unit = "Month") {
+  # This function is to produce lagged data
+  # The data have to return the N_cases
+
+  # Change the name and type of date
+  colnames(data) <- c("date","N_cases")
+  data$date <- as.Date(data$date)
+ 
+  # Get lagged data in Monthly or Weekly resolution
+  if(pred_unit == "Week"){
+    start_lag <- as.Date(start) %m-% weeks(lags)
+    end_lag <- as.Date(end) %m-% weeks(lags)
+  }else if(pred_unit == "Month"){    
+    start_lag <- as.Date(start) %m-% months(lags)
+    end_lag <- as.Date(end) %m-% months(lags)
+  }
+  
+  out <- data %>% filter(date >= start_lag & date <= end_lag)
+  return(out$N_cases)
+}
+
+from_Week_to_Month <- function(data, 
+                               type = "case"){
+  # Sometimes data is aggregated by week while we need data
+  # in Month, so this is the function to convert.
+  
+  if(type == "case"){
+    colnames(data) <- c("date","N_cases")
+    
+    # Convert the default weekly cases into Monthly
+    data_out <- data %>% mutate(    
+      Year = year(date),
+      Month = month(date),) %>% 
+      group_by(Year, Month) %>% # Sum the case by Year - Month
+      summarise(N_cases = sum(N_cases, na.rm = TRUE), .groups = "drop") %>% ungroup() %>%
+      mutate(date = as.Date(paste0(Year,"-",Month,"-","15"))) %>%
+      select(date, N_cases)
+  }
+  
+  return(data_out)
+}
+
+get_X <- function(start,
+                  end,
+                  case = NULL,
+                  GT = NULL,
+                  lags = c(1:12,24), # ARGO's setting
+                  pred_unit = "Month",
+                  offset_GT = 0.001){
+  # This function is to get the X matrix according to
+  # the need of different models
+  null_GT <- is.null(GT); null_case <- is.null(case)
+  if(null_GT & null_case){
+    stop("Error! Please input at least one valid dataset.")
+  }
+  
+  if(pred_unit != "Month" & pred_unit != "Week"){
+    stop("Error! Please input pred_unit = 'Week' or 'Month' as the expected resolution.")
+  }
+
+  if(!null_case){
+    # Standardize the variables for "case" data
+    colnames(case) <- c("date","N_cases")
+    if(pred_unit == "Month"){
+      # Convert the default weekly cases into Monthly
+      case <- from_Week_to_Month(case)
+    }
+
+    # Get the case lag data
+    case_lag <- NULL
+    for (i in seq_along(lags)) {
+      # Generate the data
+      generated_data <- lag_Gen(case, start, end, lags[i], pred_unit = pred_unit)
+
+      # Initialise the dafa frame
+      if (i == 1) {
+        case_lag <- as.data.frame(generated_data)
+        colnames(case_lag) <- paste0("lag_", lags[i])
+      } else {
+        # Paste it to the data frame
+        case_lag[paste0("lag_", lags[i])] <- generated_data
+      }
+    }
+    case_lag <- apply(case_lag, 2, function(x) log(x + 1))
+  }
+
+  if(!null_GT){
+    # Number of queries
+    query_num <- length(GT)
+    
+    # Filtering the data by Time
+    if(pred_unit == "Month"){ # Monthly
+      GT_out <- GT %>% 
+        mutate(Time_new = as.Date(paste0(Time, "-15"))) %>%
+        filter(Time_new >= start_d & Time_new <= end_d) %>%
+        mutate(across(2:query_num, as.numeric),
+           across(2:query_num, ~log(.x + offset_GT)))
+    }else{  # Weekly
+      GT_out <- GT %>% 
+        mutate(Time = as.Date(Time, format="%d/%m/%Y")) %>%
+        filter(as.Date(Time) >= start_d & as.Date(Time) <= end_d) %>%
+        mutate(across(2:query_num, as.numeric),
+               across(2:query_num, ~log(.x + offset_GT)))
+    }
+  }
+
+  if(!null_GT & !null_case){
+    X <- as.matrix(cbind(case_lag,GT_out[,2:query_num]))
+  }else if(!null_case){
+    X <- as.matrix(case_lag)
+  }else{
+    X <- as.matrix(GT_out[,2:query_num])
+  }
+
+  # Return the X matrix
+  return(X)
+}
+
+```
+
+## Prediction
+
+```{r prediction, echo=FALSE}
+get_Prediction <- function(start_train,
+                            end_train,
+                            start_pred,
+                            end_pred,
+                            model = 'ARGO',
+                            case,
+                            GT ,
+                            lags = NULL, # ARGO's setting
+                            pred_unit = "Month",
+                            offset_GT = 0.001){
+  # This function is to fit the model and to do the prediction
+  # The outcome would be predictted time series
+
+  if(model != "ARGO" & model != "SAR" & model != "GT" & model != "SAR_GT"){
+    stop("Error! Unexpected model")
+  }
+
+  # Change the unit to Month
+  if(pred_unit == "Month"){ case <- from_Week_to_Month(case) }
+
+  # Default lag setting
+  if(is.null(lags)){
+      if(model == "SAR" | model == "SAR_GT"){
+      lags <- c(1:3,24)
+      }else{
+      lags <- c(1:12,24)
+    }
+  }
+
+  # Standardize the variables for "case" data
+  colnames(case) <- c("date","N_cases")
+  case_y <- case # Create a case data for y
+
+  # Drop data if the model doesn't need it
+  if(model == "SAR"){ GT <- NULL }
+  if(model == "GT"){ case <- NULL }
+
+  # Get X and y train
+  X <- get_X(start_train, end_train,
+             case = case, GT = GT,
+             lags = lags,
+             pred_unit = pred_unit,
+             offset_GT)
+
+  yt <- case_y %>% filter(date >= start_train & date <= end_train)
+  yt <- log(yt$N_cases + 1)
+  
+  
+
+  # Fit the model
+  # Set different lambda
+  n_vars <- ncol(X)
+  penalty_factors <- c(rep(1,n_vars))
+  # Set the penalty. There is no penalty for the first three lag.
+  # If needed
+  # if(model == 'ARGO'){
+  #   penalty_factors <- c(rep(0,3),rep(1,n_vars-3))
+  # }else{
+  #   penalty_factors <- c(rep(1,n_vars))
+  # }
+
+
+  cv_fit <- cv.glmnet(X, yt, penalty.factor = penalty_factors,
+                      grouped = F)
+
+  # Best lambda
+  best_lambda <- cv_fit$lambda.min
+
+  # Final model
+  final_model <- glmnet(X, yt, lambda = best_lambda,
+                        penalty.factor = penalty_factors)
+
+  # Prediction
+  new_X <- get_X(start_pred, end_pred,
+             case = case, GT = GT,
+             lags = lags,
+             pred_unit = pred_unit,
+             offset_GT)
+
+  y_pred <- predict(final_model, newx = new_X)
+
+  y_pred_case <- exp(y_pred) - 1 # Re-scale the result
+
+  # Combine the data to check the difference
+  y_true <- case_y %>% filter(date >= start_pred & date <= end_pred)
+
+  out <- cbind(y_true$N_cases, y_pred_case)
+
+  return(out)
+}
+
+compare_Prediction <- function(start_d,
+                             end_d,
+                             case,
+                             GT,
+                             pred_period,
+                             pred_length = 1,
+                             lags = NULL,
+                             pred_unit = "Month",
+                             offset_GT = 0.001){
+  # Validates the prediction length
+  if(pred_length != 1 & pred_length != 2) {
+    stop("Error! The length of prediction should be 1 or 2 (month/s)!")
+  }
+
+  # Initializes models and prediction data frame
+  models <- c("ARGO", "SAR", "GT", "SAR_GT")
+  # models <- c("ARGO", "SAR_GT")
+  pred <- data.frame(matrix(NA, nrow = pred_period * pred_length, ncol = length(models) + 1))
+
+  # Iterates over models and prediction periods
+  for (i in seq_along(models)) {
+    for (j in 1:pred_period) {
+      
+      if(pred_unit == "Month"){
+        # Calculates training and prediction periods
+        start_d_train <- start_d %m+% months(j - 1)
+        end_d_train <- end_d %m+% months(j - 1)
+        # Prediction goes pred_length unit length for each time
+        start_d_pred <- start_d %m+% months(j + pred_length - 1)
+        end_d_pred <- end_d %m+% months(j + pred_length - 1)
+      }else{
+        # Calculates training and prediction periods
+        start_d_train <- start_d %m+% weeks(j - 1)
+        end_d_train <- end_d %m+% weeks(j - 1)
+        # Prediction goes pred_length unit length for each time
+        start_d_pred <- start_d %m+% weeks(j + pred_length - 1)
+        end_d_pred <- end_d %m+% weeks(j + pred_length - 1)
+      }
+
+
+      # Fits the model and gets predictions
+      temp_pred <- as.data.frame(get_Prediction(start_d_train, end_d_train,
+                                                start_d_pred, end_d_pred,
+                                                models[i], case, GT,
+                                                lags = lags, # ARGO's setting
+                                                pred_unit = pred_unit,
+                                                offset_GT = offset_GT))
+      temp_pred <- tail(temp_pred, pred_length) # Gets the last month(s) of prediction
+
+      # Store the result based on prediction length
+      if(pred_length == 1){
+        if(i == 1){
+          pred[j, 1:2] <- temp_pred
+        }else{
+          pred[j, i+1] <- temp_pred[,2]
+        }
+      }else{ # for pred_length == 2
+        if(i == 1){
+          pred[c(2*j - 1, 2*j), 1:2] <- temp_pred
+        }else{
+          pred[c(2*j - 1, 2*j), i+1] <- temp_pred[,2]
+        }
+      }
+
+      # Prints procedure tip
+      cat("This is the", j, "/", pred_period, "prediction for model", models[i], ".\r")
+    }
+  }
+  
+  # Get the Naive model(last month)
+  start_Naive <- end_d 
+  if(pred_unit == "Month"){
+    case <- from_Week_to_Month(case)
+    end_Naive <- end_d %m+% months(pred_period)
+  }else{
+    end_Naive <- end_d %m+% weeks(pred_period)
+  }
+  pred$X6 <- lag_Gen(case,
+        start_Naive, end_Naive,
+        lags = 1, pred_unit = pred_unit)
+  
+  # Rename the dataframe
+  colnames(pred) <- c("Real_value", models, "Naive")
+  
+  return(pred)
+}
+
+```
+
+```{r Measurements}
+get_Measurement <- function(y_fitted, y , IF_log = F){
+  # This function is to get the measurement by giving
+  # the fitted(predicted) value and the real value
+  # Unscale the value first
+  
+  if(IF_log == T){
+    case <- exp(y) - 1; case_fitted <- exp(y_fitted) - 1
+  }else{
+    case <- y ; case_fitted <- y_fitted
+  }
+
+  n <- length(case)
+  M <- as.data.frame(matrix(0, nrow = 1, ncol = 5))
+  names(M) <- c("RMSE", "MAE", "RMSPE", "MAPE", "CORR")
+
+  M[1,1] <- sqrt(mean((case_fitted - case) ^ 2))
+  M[1,2] <- mean(abs(case_fitted - case))
+  M[1,3] <- sqrt(mean(((case_fitted - case) / case) ^ 2))
+  M[1,4] <- mean(abs((case_fitted - case) / case))
+  M[1,5] <- cor(case_fitted, case, method="kendall")
+
+  return(M)
+}
+
+
+compare_Measurement <- function(data,
+                                relative_to_naive = TRUE){
+  # Input data with first column to be the real value
+  # and other columns are predicted values
+  # And model names
+  
+  # Save the col names to use it in the end
+  Models <- colnames(data)[-1]
+
+  
+    # Initialize Measurements data frame
+  Measurements <- data.frame()
+
+  # Get prediction measurements for each model
+  for(j in 1:(ncol(data)-1)){
+    if(j == 1){
+      Measurements <- get_Measurement(data[, 1], data[, j+1], F)
+    }else{
+      Measurements <- rbind(Measurements, get_Measurement(data[, 1], data[, j+1], F))
+    }
+  }
+
+  Measurements <- cbind(Models, Measurements)
+  
+  # If take values that are relative to naive
+  # if(relative_to_naive){
+  #   # Store the value of naive model
+  #   array <- Measurements[nrow(Measurements),]
+  # 
+  #   # Divided by Naive
+  #   for(i in 1:(nrow(Measurements)-1)){
+  #     Measurements[,i+1] <- Measurements[,i+1] / Measurements[5,i+1]
+  #   }
+  # 
+  #   Measurements <- rbind(Measurements[-5,], array)
+  # }
+  
+  # If take values that are relative to naive
+  if(relative_to_naive){
+    # Get the measurement of Naive model
+    naive_values <- unlist(Measurements[nrow(Measurements), -1])
+    
+    
+    # Divided by Naive
+    for(i in 1:(nrow(Measurements) - 1)){
+      Measurements[i, c(-1,-6)] <- Measurements[i, c(-1,-6)] / naive_values
+    }
+  
+    # Move Naive till the end 
+    Measurements <- rbind(Measurements[-nrow(Measurements), ], Measurements[nrow(Measurements), ])
+  }
+
+  
+  Measurements[,-1] <- round(Measurements[,-1],3)
+  
+  return(Measurements)
+}
+
+
+get_Boxplot <- function(data, 
+                        type = "Diff",
+                        order_by = "Model",
+                        plot_title = "Difference between Predictions and Real Value",
+                        x_lab = "Prediction Method",
+                        y_lab = "Difference") {
+  
+  # Determine the real value column name dynamically
+  real_value_col <- colnames(data)[1]
+  
+  # Get the names of all the prediction columns
+  # prediction_cols <- colnames(data)[-1] # now we use a customize order
+  prediction_cols <- c("SAR_GT", "ARGO", "SAR", "Naive", "GT")
+  
+  
+  
+  # Add a prefix to distinguish between absolute and percentage differences
+  prefix <- ifelse(type == "Diff", "Diff", "Perc")
+  
+  # Calculate the differences based on the type
+  df_long <- data %>%
+    mutate(across(all_of(prediction_cols),
+                  list(Diff = ~ if(type == "Diff") {
+                    abs(. - .data[[real_value_col]])
+                  } else {
+                    100 * abs(. - .data[[real_value_col]]) / .data[[real_value_col]]
+                  }),
+                  .names = "{prefix}_{.col}")) %>%
+    pivot_longer(cols = starts_with(prefix), 
+                 names_to = "Prediction", 
+                 values_to = "Difference") %>%
+    mutate(Prediction = sub(paste0("^", prefix, "_"), "", Prediction),
+           Prediction = factor(Prediction, levels = prediction_cols)) %>%
+    select(Prediction, Difference)
+  
+      # Order by median or model names
+  if (order_by == "Median") {
+    median_order <- df_long %>%
+      group_by(Prediction) %>%
+      summarize(median_val = median(Difference)) %>%
+      arrange(median_val) %>%
+      pull(Prediction)
+    
+    df_long$Prediction <- factor(df_long$Prediction, levels = median_order)
+  } else {
+    df_long$Prediction <- factor(df_long$Prediction, levels = prediction_cols)
+  }
+  
+  # Set relation between color and model
+  colors <- c("green", "red", "purple", "orange", "blue")
+  model_names <- c("SAR_GT", "ARGO", "SAR", "Naive", "GT")
+  
+  # Plot the differences using ggplot2, with different colors for each prediction method
+  p_out <- ggplot(df_long, aes(x = Prediction, y = Difference, fill = Prediction)) +
+    geom_boxplot() +
+    stat_summary(fun = mean, geom = "point", color = "red", size = 2, shape = 18) +
+    labs(title = plot_title,
+         x = x_lab,
+         y = y_lab) +
+    theme_minimal() +
+    scale_fill_manual(values = colors, breaks = model_names) # Use a color palette for different fills
+
+  return(p_out)
+}
+```
+
+```{r example}
+start_d <- as.Date('2020-01-01'); end_d <- as.Date('2021-12-31')
+start_pred <- start_d %m+% months(1); end_pred <- end_d %m+% months(1)
+
+# X marix
+X_test <- get_X(start_d,
+                end_d, 
+                case = AC, 
+                GT = AC_GT_Weekly,
+                lags = c(1:12), # ARGO's setting
+                pred_unit = "Week",
+                offset_GT = 0.001) 
+
+# Single prediction
+pred_single <- get_Prediction(start_d,
+                       end_d,
+                       start_pred,
+                       end_pred,
+                       model = 'ARGO',
+                       AC,
+                       AC_GT ,
+                       lags = c(1:52), # ARGO's setting
+                       pred_unit = "Month",
+                       offset_GT = 0.001)
+
+# Predictions
+set.seed(1)
+preds <- compare_Prediction(start_d, end_d,
+                            case = AC, GT = AC_GT,
+                            12, 1,
+                            pred_unit = "Month")
+
+# Measurements
+preds_M <- compare_Measurement(preds, relative_to_naive = F)
+
+# Boxplot
+get_Boxplot(preds,
+            type = "Prec",
+            order_by = "Model")
+```
+
+```{r BeforeC}
+set.seed(1)
+# Monthly
+################### Before Covid， before  2020 ###################
+
+# Two years time window
+start_d <- as.Date('2015-01-01'); end_d <- as.Date('2017-12-31')
+# lags <- c(1:24)
+
+### AC
+AC_15_17_two <- compare_Prediction(start_d, end_d,
+                            case = AC, GT = AC_GT,
+                            24, 1,
+                            # lags = c(1:24),
+                            pred_unit = "Month")
+### AM
+AM_15_17_two <- compare_Prediction(start_d, end_d,
+                            case = AM, GT = AM_GT,
+                            24, 1,
+                            # lags = c(1:24),
+                            pred_unit = "Month")
+### SP
+SP_15_17_two <- compare_Prediction(start_d, end_d,
+                            case = SP, GT = SP_GT,
+                            24, 1,
+                            # lags = c(1:24),
+                            pred_unit = "Month")
+### RJ
+RJ_15_17_two <- compare_Prediction(start_d, end_d,
+                            case = RJ, GT = RJ_GT,
+                            24, 1,
+                            # lags = c(1:24),
+                            pred_unit = "Month")
+
+
+AC_15_17_two_m <- compare_Measurement(AC_15_17_two)
+
+AC_15_17_two_p <- get_Boxplot(AC_15_17_two,
+            # type = "Prec",
+            order_by = "Model",
+            plot_title = "Acre",
+            y_lab = "Absolute(y - y_pred)")
+
+AM_15_17_two_m <- compare_Measurement(AM_15_17_two)
+
+AM_15_17_two_p <- get_Boxplot(AM_15_17_two,
+            # type = "Prec",
+            order_by = "Model",
+            plot_title = "Amazônas",
+            y_lab = "Absolute(y - y_pred)")
+
+SP_15_17_two_m <- compare_Measurement(SP_15_17_two)
+
+SP_15_17_two_p <- get_Boxplot(SP_15_17_two,
+            # type = "Prec",
+            order_by = "Model",
+            plot_title = "São Paulo",
+            y_lab = "Absolute(y - y_pred)")
+
+RJ_15_17_two_m <- compare_Measurement(RJ_15_17_two, relative_to_naive = F)
+
+RJ_15_17_two_p <- get_Boxplot(RJ_15_17_two,
+            # type = "Prec",
+            order_by = "Model",
+            plot_title = "Rio de Janeiro",
+            y_lab = "Absolute(y - y_pred)")
+
+
+# Weekly
+# How to choose lags
+
+```
+
+```{R AfterC}
+set.seed(1)
+#################### After Covid ###################
+start_d <- as.Date('2022-01-01'); end_d <- as.Date('2022-12-31')
+
+# AC
+AC_22_22_one <- compare_Prediction(start_d, end_d,
+                            case = AC, GT = AC_GT,
+                            12, 1,
+                            # lags = c(1:24),
+                            pred_unit = "Month")
+# AM
+AM_22_22_one <- compare_Prediction(start_d, end_d,
+                            case = AM, GT = AM_GT,
+                            12, 1,
+                            # lags = c(1:24),
+                            pred_unit = "Month")
+# SP
+SP_22_22_one <- compare_Prediction(start_d, end_d,
+                            case = SP, GT = SP_GT,
+                            12, 1,
+                            # lags = c(1:24),
+                            pred_unit = "Month")
+# RJ
+RJ_22_22_one <- compare_Prediction(start_d, end_d,
+                            case = RJ, GT = RJ_GT,
+                            12, 1,
+                            # lags = c(1:24),
+                            pred_unit = "Month")
+
+AC_22_22_one_m <- compare_Measurement(AC_22_22_one)
+
+AC_22_22_one_p <- get_Boxplot(AC_22_22_one,
+            # type = "Prec",
+            order_by = "Model",
+            plot_title = "Acre",
+            y_lab = "Absolute(y - y_pred)")
+
+AM_22_22_one_m <- compare_Measurement(AM_22_22_one)
+
+AM_22_22_one_p <- get_Boxplot(AM_22_22_one,
+            # type = "Prec",
+            order_by = "Model",
+            plot_title = "Amazônas",
+            y_lab = "Absolute(y - y_pred)")
+
+SP_22_22_one_m <- compare_Measurement(SP_22_22_one)
+
+SP_22_22_one_p <- get_Boxplot(SP_22_22_one,
+            # type = "Prec",
+            order_by = "Model",
+            plot_title = "São Paulo",
+            y_lab = "Absolute(y - y_pred)")
+
+RJ_22_22_one_m <- compare_Measurement(RJ_22_22_one)
+
+RJ_22_22_one_p <- get_Boxplot(RJ_22_22_one,
+            # type = "Prec",
+            order_by = "Model",
+            plot_title = "Rio de Janeiro",
+            y_lab = "Absolute(y - y_pred)")
+
+```
+
+
+```{R LastTen}
+set.seed(1)
+#################### Last ten-years ###################
+start_d <- as.Date('2015-01-01'); end_d <- as.Date('2017-12-31')
+
+# AC
+AC_15_17_six <- compare_Prediction(start_d, end_d,
+                            case = AC, GT = AC_GT,
+                            72, 1,
+                            # lags = c(1:24),
+                            pred_unit = "Month")
+
+# AM
+AM_15_17_six <- compare_Prediction(start_d, end_d,
+                            case = AM, GT = AM_GT,
+                            72, 1,
+                            # lags = c(1:24),
+                            pred_unit = "Month")
+
+# SP
+SP_15_17_six <- compare_Prediction(start_d, end_d,
+                            case = SP, GT = SP_GT,
+                            72, 1,
+                            # lags = c(1:24),
+                            pred_unit = "Month")
+
+# RJ
+RJ_15_17_six <- compare_Prediction(start_d, end_d,
+                            case = RJ, GT = RJ_GT,
+                            72, 1,
+                            # lags = c(1:24),
+                            pred_unit = "Month")
+
+AC_15_17_six_m <- compare_Measurement(AC_15_17_six)
+
+AC_15_17_six_p <- get_Boxplot(AC_15_17_six,
+            # type = "Prec",
+            order_by = "Model",
+            plot_title = "Acre",
+            y_lab = "Absolute(y - y_pred)")
+
+AM_15_17_six_m <- compare_Measurement(AM_15_17_six)
+
+AM_15_17_six_p <- get_Boxplot(AM_15_17_six,
+            # type = "Prec",
+            order_by = "Model",
+            plot_title = "Amazônas",
+            y_lab = "Absolute(y - y_pred)")
+
+
+SP_15_17_six_m <- compare_Measurement(SP_15_17_six)
+
+SP_15_17_six_p <- get_Boxplot(SP_15_17_six,
+            # type = "Prec",
+            order_by = "Model",
+            plot_title = "São Paulo",
+            y_lab = "Absolute(y - y_pred)")
+
+
+RJ_15_17_six_m <- compare_Measurement(RJ_15_17_six)
+
+RJ_15_17_six_p <- get_Boxplot(RJ_15_17_six,
+            # type = "Prec",
+            order_by = "Model",
+            plot_title = "Rio de Janeiro",
+            y_lab = "Absolute(y - y_pred)")
+
+```
+
+```{R try}
+library(patchwork)
+
+(AC_15_17_two_p | SP_15_17_two_p) / (AM_15_17_two_p | RJ_15_17_two_p)
+(AC_22_22_one_p | SP_22_22_one_p) / (AM_22_22_one_p | RJ_22_22_one_p)
+(AC_15_17_six_p | SP_15_17_six_p) / (AM_15_17_six_p | RJ_15_17_six_p)
+
+file_adress <- "/Users/xiaoy0a/Desktop/Task/Nowcasting/2ndMeeting/result"
+ggsave(filename = "15_17_two_box_model_diff.jpeg", path = file_adress, dpi = 200, 
+       width = 12, height = 8)
+ggsave(filename = "22_22_one_box_model_diff.jpeg", path = file_adress, dpi = 200, 
+       width = 12, height = 8)
+ggsave(filename = "15_17_six_box_model_diff.jpeg", path = file_adress, dpi = 200, 
+       width = 12, height = 8)
+```
+
+
+```{R test}
+start_d <- as.Date('2019-01-01'); end_d <- as.Date('2021-12-31')
+
+# AC
+AC_19_21_two <- compare_Prediction(start_d, end_d,
+                            case = AC, GT = AC_GT,
+                            24, 1,
+                            # lags = c(1:24),
+                            pred_unit = "Month")
+# AM
+AM_19_21_two <- compare_Prediction(start_d, end_d,
+                            case = AM, GT = AM_GT,
+                            24, 1,
+                            # lags = c(1:24),
+                            pred_unit = "Month")
+# SP
+SP_19_21_two <- compare_Prediction(start_d, end_d,
+                            case = SP, GT = SP_GT,
+                            24, 1,
+                            # lags = c(1:24),
+                            pred_unit = "Month")
+# RJ
+RJ_19_21_two <- compare_Prediction(start_d, end_d,
+                            case = RJ, GT = RJ_GT,
+                            24, 1,
+                            # lags = c(1:24),
+                            pred_unit = "Month")
+
+AC_19_21_two_m <- compare_Measurement(AC_19_21_two)
+
+AC_19_21_two_p <- get_Boxplot(AC_19_21_two,
+            # type = "Prec",
+            order_by = "Model",
+            plot_title = "Acre",
+            y_lab = "Absolute(y - y_pred)")
+
+AM_19_21_two_m <- compare_Measurement(AM_19_21_two)
+
+AM_19_21_two_p <- get_Boxplot(AM_19_21_two,
+            # type = "Prec",
+            order_by = "Model",
+            plot_title = "Amazônas",
+            y_lab = "Absolute(y - y_pred)")
+
+SP_19_21_two_m <- compare_Measurement(SP_19_21_two)
+
+SP_19_21_two_p <- get_Boxplot(SP_19_21_two,
+            # type = "Prec",
+            order_by = "Model",
+            plot_title = "São Paulo",
+            y_lab = "Absolute(y - y_pred)")
+
+RJ_19_21_two_m <- compare_Measurement(RJ_19_21_two)
+
+RJ_19_21_two_p <- get_Boxplot(RJ_19_21_two,
+            # type = "Prec",
+            order_by = "Model",
+            plot_title = "Rio de Janeiro",
+            y_lab = "Absolute(y - y_pred)")
+
+(AC_19_21_two_p | SP_19_21_two_p) / (AM_19_21_two_p | RJ_19_21_two_p)
+ggsave(filename = "19_21_two_box_model.jpeg", path = file_adress, dpi = 200, 
+       width = 12, height = 8)
+```
+
+
+```{R new_test}
+library()
+# AC_t <- fetch_data_from_state("AC", 2013, 2023)
+AC_t <- AC
+# AC_t <- AC_t[,c(1,3)]
+AC_t <- from_Week_to_Month(AC_t) 
+AC_t$N_cases <- AC_t$N_cases/max(AC_t$N_cases)
+
+AC_t$date <- as.character(AC_t$date)
+AC_t$N_cases <- as.character(AC_t$N_cases)
+
+AC_t <- AC_t[-1,]
+AC_t$date <- substr(AC_t$date,1,7)
+
+colnames(AC_t) <- c("Time", "Norm")
+
+AC_t$Norm_1 <- AC_t$Norm
+
+fetch_data_from_state("AC", 2013, 2023)
+?fetch_data_from_state
+start_d <- as.Date('2015-01-01'); end_d <- as.Date('2017-12-31')
+
+set.seed(1)
+AC_15_17_two <- compare_Prediction(start_d, end_d,
+                            case = AC, GT = AC_GT,
+                            24, 1,
+                            # lags = c(1:24),
+                            pred_unit = "Month")
+set.seed(1)
+AC_15_17_two_2 <- compare_Prediction(start_d, end_d,
+                            case = AC, GT = AC_t,
+                            24, 1,
+                            # lags = c(1:24),
+                            pred_unit = "Month")
+
+compare_Prediction(start_d, end_d,
+                            case = AC, GT = AC_GT[,-3],
+                            24, 1,
+                            # lags = c(1:24),
+                            pred_unit = "Month")
+
+compare_Prediction(start_d, end_d,
+                            case = AC, GT = AC_t[,c(1:2)],
+                            24, 1,
+                            # lags = c(1:24),
+                            pred_unit = "Month")
+```
+
+```{R}
+a <- compare_Measurement(AC_15_17_two,F)
+b <- compare_Measurement(AC_15_17_two_2,F)
+c <- a[, -1] - b[, -1]
+
+class(a)
+X <- matrix(rnorm(120), nrow = 12)
+Y <- c(1:12)
+X_1 <- as.matrix(rnorm(120))
+cv.glmnet(X_1,Y)
+```

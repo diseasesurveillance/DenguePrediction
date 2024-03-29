@@ -1,29 +1,35 @@
-#' Fit Model and Make Prediction
+#' Model Fitting and Prediction
 #'
-#' This function fits the specified prediction model to the training data and makes predictions for the given period.
+#' Utilizes specified prediction models to fit training data, incorporating both epidemiological case data and Google Trends data. After model fitting, it forecasts case counts for a designated future period. The function supports a variety of models including ARGO, SAR, GT, and SAR_GT for a comprehensive analysis.
 #'
-#' @param model The model to fit ("ARGO", "SAR", "GT", or "SAR_GT").
-#' @param start_train The start date for the training period.
-#' @param end_train The end date for the training period.
-#' @param start_pred The start date for the prediction period.
-#' @param end_pred The end date for the prediction period.
-#' @param case A data frame containing case data.
-#' @param GT A data frame containing Google Trends data.
+#' @param start_train The start date for the training dataset, in "YYYY-MM-DD" format.
+#' @param end_train The end date for the training dataset, in "YYYY-MM-DD" format.
+#' @param start_pred The start date for the forecasting period, in "YYYY-MM-DD" format.
+#' @param end_pred The end date for the forecasting period, in "YYYY-MM-DD" format.
+#' @param model The prediction model to be applied. Accepted models include "ARGO", "SAR", "GT", or "SAR_GT", with "ARGO" being the default.
+#' @param case A data frame containing the case data, which must include columns for "date" and "N_cases".
+#' @param GT A data frame of Google Trends data, relevant to the case study.
+#' @param lags An optional numeric vector detailing the lags to be applied for generating lagged data. The default setting varies based on the chosen model.
+#' @param pred_unit The prediction unit, either "Month" or "Week", with "Month" set as the default.
+#' @param offset_GT A small positive value added to the Google Trends data before logarithmic transformation, set to avoid the log of zero issues. The default value is 0.001.
 #'
-#' @return A data frame with actual and predicted cases for the prediction period.
+#' @return Returns a data frame containing both the actual and predicted case counts for the forecast period, facilitating direct comparison and model evaluation.
 #' @examples
-#' get_Prediction("ARGO", "2020-01-01", "2020-06-30", "2020-07-01", "2020-07-31", case_data, GT_data)
+#' get_Prediction(start_train = "2020-01-01", end_train = "2020-06-30",
+#'                start_pred = "2020-07-01", end_pred = "2020-07-31",
+#'                model = "ARGO", case = case_data, GT = GT_data)
 #' @export
+
 get_Prediction <- function(start_train,
-                            end_train,
-                            start_pred,
-                            end_pred,
-                            model = 'ARGO',
-                            case,
-                            GT ,
-                            lags = NULL, # ARGO's setting
-                            pred_unit = "M",
-                            offset_GT = 0.001){
+                           end_train,
+                           start_pred,
+                           end_pred,
+                           model = 'ARGO',
+                           case,
+                           GT ,
+                           lags = NULL, # ARGO's setting
+                           pred_unit = "Month",
+                           offset_GT = 0.001){
   # This function is to fit the model and to do the prediction
   # The outcome would be predictted time series
 
@@ -32,13 +38,13 @@ get_Prediction <- function(start_train,
   }
 
   # Change the unit to Month
-  if(pred_unit == "M"){ case <- from_Week_to_Month(case) }
+  if(pred_unit == "Month"){ case <- from_Week_to_Month(case) }
 
   # Default lag setting
   if(is.null(lags)){
-      if(model == "SAR" | model == "SAR_GT"){
+    if(model == "SAR" | model == "SAR_GT"){
       lags <- c(1:3,24)
-      }else{
+    }else{
       lags <- c(1:12,24)
     }
   }
@@ -55,26 +61,29 @@ get_Prediction <- function(start_train,
   X <- get_X(start_train, end_train,
              case = case, GT = GT,
              lags = lags,
-             pred_unit,
+             pred_unit = pred_unit,
              offset_GT)
 
   yt <- case_y %>% filter(date >= start_train & date <= end_train)
   yt <- log(yt$N_cases + 1)
 
 
+
   # Fit the model
   # Set different lambda
   n_vars <- ncol(X)
-
+  penalty_factors <- c(rep(1,n_vars))
   # Set the penalty. There is no penalty for the first three lag.
-  if(model == 'ARGO'){
-      penalty_factors <- c(rep(0,3),rep(1,n_vars-3))
-  }else{
-    penalty_factors <- c(rep(1,n_vars))
-  }
+  # If needed
+  # if(model == 'ARGO'){
+  #   penalty_factors <- c(rep(0,3),rep(1,n_vars-3))
+  # }else{
+  #   penalty_factors <- c(rep(1,n_vars))
+  # }
 
 
-  cv_fit <- cv.glmnet(X, yt, penalty.factor = penalty_factors)
+  cv_fit <- cv.glmnet(X, yt, penalty.factor = penalty_factors,
+                      grouped = F)
 
   # Best lambda
   best_lambda <- cv_fit$lambda.min
@@ -85,10 +94,10 @@ get_Prediction <- function(start_train,
 
   # Prediction
   new_X <- get_X(start_pred, end_pred,
-             case = case, GT = GT,
-             lags = lags,
-             pred_unit,
-             offset_GT)
+                 case = case, GT = GT,
+                 lags = lags,
+                 pred_unit = pred_unit,
+                 offset_GT)
 
   y_pred <- predict(final_model, newx = new_X)
 

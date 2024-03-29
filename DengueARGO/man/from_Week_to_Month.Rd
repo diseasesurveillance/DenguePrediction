@@ -17,9 +17,9 @@ A data frame with the dates converted to the first of each month and the weekly 
         The resulting data frame will have two columns: "date" (of class Date) and "N_cases".
 }
 \description{
-Aggregated data often comes in weekly format but some analyses require monthly aggregation. This function converts weekly 
-aggregated data into monthly aggregates by summing the values within each month. The conversion assumes that the date 
-provided in the data is the start of the week. It outputs a data frame with a single date entry for each month, which 
+Aggregated data often comes in weekly format but some analyses require monthly aggregation. This function converts weekly
+aggregated data into monthly aggregates by summing the values within each month. The conversion assumes that the date
+provided in the data is the start of the week. It outputs a data frame with a single date entry for each month, which
 represents the aggregated sum of cases for that month. The date is set to the 15th of the respective month.
 }
 \examples{
